@@ -93,10 +93,11 @@
   .options { margin-top: 32px; display: flex; flex-direction: column; gap: 12px; }
   .btn-opt {
     position: relative; overflow: hidden;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
     width: 100%; min-height: 60px; padding: 14px 20px; text-align: left;
     background: transparent; color: var(--text);
     border: 1px solid var(--line); border-radius: 14px;
-    font-size: 18px; font-weight: 500;
+    font-size: 18px; font-weight: 500; line-height: 1.5;
     transition: background .15s, border-color .15s, opacity .3s ease, transform .12s ease;
     animation: fade .45s ease backwards;
     animation-delay: calc(var(--i, 0) * 70ms);
@@ -112,8 +113,32 @@
   @keyframes ripple { to { transform: scale(1); opacity: 0; } }
   .progress .ring { animation: twinkle 2.4s ease-in-out infinite; }
   .btn-opt:active { background: var(--panel); }
-  .btn-opt.selected { background: #1A2550; border: 2px solid var(--gold); color: var(--gold); font-weight: 700; }
   .btn-opt:disabled { cursor: default; }
+
+  /* 回答後：正解の選択肢は金色、選んだ間違いは赤系（色だけに頼らず、ラベルも付ける） */
+  .btn-opt .tag {
+    flex: none; font-size: 13px; font-weight: 700; letter-spacing: 0.08em;
+    padding: 2px 10px; border-radius: 12px; white-space: nowrap;
+  }
+  .btn-opt.correct { background: #1A2550; border: 2px solid var(--gold); color: var(--gold); font-weight: 700; }
+  .btn-opt.correct .tag { background: var(--gold); color: var(--bg); }
+  .btn-opt.wrong { background: rgba(255,138,128,.08); border: 2px solid var(--coral); color: var(--coral); font-weight: 700; }
+  .btn-opt.wrong .tag { border: 1px solid var(--coral); }
+
+  /* 回答後の解説 */
+  .fb {
+    margin-top: 20px; padding: 18px 18px 20px 18px; border-radius: 16px;
+    background: var(--panel); border: 1px solid var(--line);
+    animation: fade .35s ease both;
+  }
+  .fb.ok { border-color: var(--gold); }
+  .fb.ng { border-color: var(--coral); }
+  .fb-verdict { font-family: var(--serif); font-weight: 800; font-size: 26px; letter-spacing: 0.06em; margin: 0; }
+  .fb.ok .fb-verdict { color: var(--gold); }
+  .fb.ng .fb-verdict { color: var(--coral); }
+  .fb-answer { margin: 8px 0 0 0; font-weight: 700; color: var(--text); }
+  .fb-explain { margin: 8px 0 0 0; color: var(--sub); }
+  .fb .btn { margin-top: 16px; }
 
   /* 結果 */
   .score-label { font-size: 14px; letter-spacing: 0.3em; color: var(--gold); margin: 40px 0 0 0; }
@@ -261,7 +286,7 @@
   #fx-back { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
 
   @media (prefers-reduced-motion: reduce) {
-    .screen, .hero .twinkle, .clock svg, .pop, .rank-finale, .btn-opt, .progress .ring { animation: none; }
+    .screen, .hero .twinkle, .clock svg, .pop, .rank-finale, .btn-opt, .progress .ring, .fb { animation: none; }
     .screen.leaving { transition: none; }
     .ticket-main.wiggle { animation: none; }
     .ticket-main, .ticket-main.gone, .ticket-used { transition: none; }
@@ -317,6 +342,8 @@
     <p id="q-number" class="q-number" aria-live="polite"></p>
     <h2 id="q-text" class="q-title"></h2>
     <div id="q-options" class="options"></div>
+    <!-- 回答後に「正解／おしい」と解説、次へ進むボタンが入る -->
+    <div id="q-feedback" aria-live="polite"></div>
   </section>
 
   <!-- 画面2: 結果画面（全問正解以外） -->
@@ -425,14 +452,26 @@
     devPassword: '1234'   // 【開発者用】リセットのパスワード
   };
 
-  // ===== クイズデータ（5問、4択、answer は正解の選択肢の番号［0始まり］） =====
+  // ===== クイズデータ（5問、4択） =====
+  // answer: 正解の選択肢の番号（0始まり）
+  // explain: 回答後に表示する解説（1〜2文）
   // 表示時に選択肢の並びはランダムに入れ替わります。
   const quizData = [
-    { q: "クイズ1", options: ["選択肢 1（正解）", "選択肢 2", "選択肢 3", "選択肢 4"], answer: 0 },
-    { q: "クイズ2", options: ["選択肢 1（正解）", "選択肢 2", "選択肢 3", "選択肢 4"], answer: 0 },
-    { q: "クイズ3", options: ["選択肢 1（正解）", "選択肢 2", "選択肢 3", "選択肢 4"], answer: 0 },
-    { q: "クイズ4", options: ["選択肢 1（正解）", "選択肢 2", "選択肢 3", "選択肢 4"], answer: 0 },
-    { q: "クイズ5", options: ["選択肢 1（正解）", "選択肢 2", "選択肢 3", "選択肢 4"], answer: 0 }
+    { q: "春の星、うしかい座のアークトゥルスは何色に輝いている？",
+      options: ["緑色", "オレンジ色", "紫色", "ピンク色"], answer: 1,
+      explain: "アークトゥルスはオレンジ色の星です。星の色は表面温度の違いで、青白い星ほど高温です。" },
+    { q: "夏の夜空を横切る、白っぽい光の帯は何という？",
+      options: ["オーロラ", "流れ星", "天の川", "虹"], answer: 2,
+      explain: "夏の大三角のあたりを流れる淡い光の帯が、天の川です。街の明かりが少ない場所だと見えやすくなります。" },
+    { q: "天の川の正体は、何を見た姿？",
+      options: ["雲", "遠くの街の明かり", "月の光", "私たちが住む銀河を内側から見た姿"], answer: 3,
+      explain: "太陽もある「銀河系」を内側から見ると、たくさんの星が集まって光の帯に見えます。" },
+    { q: "「1光年」とは、どんな距離のこと？",
+      options: ["光が1年かけて進む距離", "1年間で歩ける距離", "星の明るさの単位", "地球が太陽を1周する距離"], answer: 0,
+      explain: "アンドロメダ銀河は約250万光年先。今見えている光は、約250万年前に出発したものです。" },
+    { q: "冬のオリオン大星雲では、何が起きている？",
+      options: ["星が消えている", "雨が降っている", "新しい星が生まれている", "月が作られている"], answer: 2,
+      explain: "ガスや塵が重力で集まって、今まさに新しい星が生まれています。" }
   ];
 
   // 正解数に応じた「星ランク」（等級が小さいほど明るい星）
@@ -463,6 +502,14 @@
   }
   setInterval(updateClock, 1000);
   updateClock();
+
+  // 小さなDOM作成ヘルパー
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
 
   // ===== 画面制御 =====
   const SCREENS = ['screen-start', 'screen-quiz', 'screen-retry', 'screen-success', 'screen-nocoupon', 'screen-redeemed'];
@@ -677,7 +724,7 @@
   window.onload = function () {
     const failed = store.get('quiz_failed') === 'true';
     document.getElementById('start-note').innerText =
-      `全${quizData.length}問・約2分` + (failed ? '　／　※挑戦済みのため、クーポンの対象外です' : '');
+      `全${quizData.length}問・約3分` + (failed ? '　／　※挑戦済みのため、クーポンの対象外です' : '');
     if (new URLSearchParams(location.search).has('dev')) {
       document.getElementById('start-dev').classList.remove('hidden');
     }
@@ -741,28 +788,46 @@
     renderProgress();
     document.getElementById('q-number').innerText = `第 ${currentQ + 1} 問 / 全 ${quizData.length} 問`;
     document.getElementById('q-text').innerText = q.q;
+    document.getElementById('q-feedback').innerHTML = '';   // 前の問題の解説を消す
 
     const optContainer = document.getElementById('q-options');
     optContainer.innerHTML = '';
     const opts = shuffle(q.options.map((text, index) => ({ text, correct: index === q.answer })));
     opts.forEach((opt, i) => {
       const btn = document.createElement('button');
+      btn.type = 'button';
       btn.className = 'btn-opt';
       btn.style.setProperty('--i', i);   // 選択肢が上から順にふわっと現れる
-      btn.innerText = opt.text;
-      btn.onclick = (e) => selectAnswer(btn, opt.correct, e);
+      btn.dataset.correct = opt.correct ? '1' : '';
+      btn.appendChild(el('span', 'opt-text', opt.text));
+      btn.onclick = (e) => selectAnswer(btn, e);
       optContainer.appendChild(btn);
     });
   }
 
-  function selectAnswer(btn, isCorrect, ev) {
+  function addTag(btn, text) {
+    btn.appendChild(el('span', 'tag', text));
+  }
+
+  function selectAnswer(btn, ev) {
     if (locked) return;
     locked = true;
-    btn.classList.add('selected');
+    const isCorrect = btn.dataset.correct === '1';
+
+    // 正解の選択肢は金色、選んだ間違いは赤系、ほかはすっと暗くなる
     document.querySelectorAll('#q-options .btn-opt').forEach(b => {
       b.disabled = true;
-      if (b !== btn) b.classList.add('dim');   // 選ばなかった選択肢はすっと暗くなる
+      if (b.dataset.correct === '1') {
+        b.classList.add('correct');
+        addTag(b, '正解');
+      } else if (b === btn) {
+        b.classList.add('wrong');
+        addTag(b, 'あなたの答え');
+      } else {
+        b.classList.add('dim');
+      }
     });
+
     if (isCorrect) {
       score++;
       // 正解：背景に流れ星が流れ、タップした場所に小さな星がはじける
@@ -773,15 +838,41 @@
       const y = ev && ev.clientY ? ev.clientY : r.top + r.height / 2;
       spawnBurst(x, y, 0, { n: 8, dMin: 30, dRange: 50, size: 6, sizeRange: 6, finale: false });
     }
-    // 少し余韻を置いてから、次の問題（または結果）へフェードで切り替える
-    setTimeout(() => {
-      currentQ++;
-      if (currentQ < quizData.length) {
-        showQuestion();
-      } else {
-        finishQuiz();
-      }
-    }, 800);
+    showFeedback(isCorrect);
+  }
+
+  // 回答後の解説と「次へ」ボタン
+  function showFeedback(isCorrect) {
+    const q = quizData[currentQ];
+    const isLast = currentQ === quizData.length - 1;
+    const box = document.getElementById('q-feedback');
+    box.innerHTML = '';
+
+    const fb = el('div', 'fb ' + (isCorrect ? 'ok' : 'ng'));
+    fb.appendChild(el('p', 'fb-verdict', isCorrect ? '正解！' : 'おしい！'));
+    if (!isCorrect) fb.appendChild(el('p', 'fb-answer', '正解は「' + q.options[q.answer] + '」です。'));
+    if (q.explain) fb.appendChild(el('p', 'fb-explain', q.explain));
+
+    const next = el('button', 'btn btn-primary', isLast ? '結果を見る' : '次の問題へ');
+    next.type = 'button';
+    next.addEventListener('click', () => {
+      next.disabled = true;   // 連打で2問飛ばさない
+      nextQuestion();
+    });
+    fb.appendChild(next);
+    box.appendChild(fb);
+
+    next.focus({ preventScroll: true });
+    fb.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest' });
+  }
+
+  function nextQuestion() {
+    currentQ++;
+    if (currentQ < quizData.length) {
+      showQuestion();
+    } else {
+      finishQuiz();
+    }
   }
 
   function finishQuiz() {
