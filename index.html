@@ -217,6 +217,15 @@
 
   .foot { text-align: center; font-size: 12px; color: var(--mute); padding-top: 20px; letter-spacing: 0.1em; }
 
+  /* 整理番号・テスト表示・確認中 */
+  .coupon-no { font-family: var(--serif); font-weight: 800; font-size: 40px; letter-spacing: .08em; color: var(--text); margin: 10px 0 0 0; line-height: 1.2; }
+  .coupon-no small { font-size: 14px; letter-spacing: .2em; color: var(--mute); margin-right: 8px; font-weight: 500; }
+  .coupon-no.is-test { color: var(--coral); font-size: 22px; letter-spacing: .04em; }
+  .test-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 20; text-align: center; padding: 4px 8px; font-size: 12px; font-weight: 700; letter-spacing: .12em; background: var(--coral); color: var(--bg); }
+  body.is-test .app { padding-top: calc(40px + env(safe-area-inset-top)); }
+  .spinner { width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--gold); animation: spin 1s linear infinite; margin: 0 auto; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
   /* モーダル（開発者リセット用） */
   .modal { position: fixed; inset: 0; z-index: 10; background: rgba(3,6,15,.78); display: flex; align-items: center; justify-content: center; padding: 24px; }
   .modal-box { width: 100%; max-width: 360px; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 24px; }
@@ -286,7 +295,7 @@
   #fx-back { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
 
   @media (prefers-reduced-motion: reduce) {
-    .screen, .hero .twinkle, .clock svg, .pop, .rank-finale, .btn-opt, .progress .ring, .fb { animation: none; }
+    .screen, .hero .twinkle, .clock svg, .pop, .rank-finale, .btn-opt, .progress .ring, .fb, .spinner { animation: none; }
     .screen.leaving { transition: none; }
     .ticket-main.wiggle { animation: none; }
     .ticket-main, .ticket-main.gone, .ticket-used { transition: none; }
@@ -300,6 +309,8 @@
 </style>
 </head>
 <body>
+
+<div id="test-banner" class="test-banner hidden" role="status"></div>
 
 <main class="app">
   <header class="top">
@@ -372,6 +383,7 @@
       <svg width="22" height="22" viewBox="-12 -12 24 24" aria-hidden="true"><path fill="#F2C75C" d="M0,-10 Q1,-1 10,0 Q1,1 0,10 Q-1,1 -10,0 Q-1,-1 0,-10Z"/></svg>
       <p class="coupon-title">特典クーポン</p>
       <p class="coupon-sub">鈴カステラ1個増量クーポン</p>
+      <p class="coupon-no hidden" id="coupon-no-success"></p>
     </div>
 
     <div class="spacer"></div>
@@ -398,11 +410,45 @@
     </div>
   </section>
 
+  <!-- 画面3c: 番号の確認中／通信エラー -->
+  <section id="screen-claim" class="screen hidden center">
+    <div class="spacer"></div>
+    <div id="claim-loading">
+      <div class="spinner" role="status" aria-label="確認中"></div>
+      <h2 style="margin-top: 24px; font-size: 24px;">全問正解！</h2>
+      <p class="lead">クーポンの番号を確認しています…</p>
+    </div>
+    <div id="claim-error" class="hidden" style="width: 100%;">
+      <span class="badge">全問正解！</span>
+      <h2 style="margin-top: 20px; font-size: 24px;">通信できませんでした</h2>
+      <p class="lead" style="text-wrap: balance;">電波のよい場所で、もう一度ボタンを押してください。<br>満点の記録は残っているので、この画面を閉じても大丈夫です。</p>
+      <div class="stack" style="margin-top: 28px;">
+        <button class="btn btn-primary" onclick="claimCoupon()">もう一度試す</button>
+      </div>
+    </div>
+    <div class="spacer"></div>
+  </section>
+
+  <!-- 画面3d: 全問正解したが、先着の枠が終了していた -->
+  <section id="screen-soldout" class="screen hidden center">
+    <span class="badge pop">全問正解！</span>
+    <p class="rank-label" style="margin-top: 20px;">あなたの星ランク</p>
+    <p class="rank rank-finale">一等星</p>
+    <h1 style="font-size: 30px; margin-top: 16px;">満点おめでとう！</h1>
+    <p class="lead" style="margin-top: 12px;">クーポンは、先着<span id="soldout-limit"></span>人に達したため配布を終了しました。<br>残念ですが、あなたも立派な星空クイズの達人です。</p>
+    <p class="lead" style="margin-top: 12px;">ご参加ありがとうございました！</p>
+    <div class="spacer"></div>
+    <div class="stack" style="width: 100%;">
+      <button class="btn btn-ghost" onclick="resetQuiz()">もう一度あそぶ</button>
+    </div>
+  </section>
+
   <!-- 画面4: クーポン画面（引き換え後。お店の人がちぎる。再読み込みしてもここが表示される） -->
   <section id="screen-redeemed" class="screen hidden center">
     <span class="badge" id="coupon-badge">クーポン発行済み</span>
     <h1 id="coupon-title" style="font-size: clamp(18px, 5.4vw, 26px); letter-spacing: 0.02em; margin-top: 20px; text-wrap: balance;">クーポン発行完了</h1>
     <p class="lead" id="coupon-lead" style="margin-top: 12px;"></p>
+    <p class="coupon-no hidden" id="coupon-no-redeemed" style="font-size: 28px; margin-top: 8px;"></p>
 
     <!-- 半券（奥）→ 使用済みの表示 → 本体（手前。これをスワイプでちぎる） -->
     <div class="ticket" id="ticket">
@@ -449,8 +495,24 @@
 <script>
   // ===== 設定（ここを書き換える） =====
   const CONFIG = {
-    devPassword: '1234'   // 【開発者用】リセットのパスワード
+    devPassword: '1234',   // 【開発者用】リセットのパスワード
+    claimUrl: 'https://script.google.com/macros/s/AKfycbwEnopF-k3lwF948eq4Tb_QFBRazv1wWXRc3sPyENkhks17FWqDcFLH4yY57PmikTw/exec',          // Apps Script のウェブアプリURL（末尾 /exec）。空欄なら番号なしで、これまで通り動きます
+    claimTimeoutMs: 10000  // 番号の取得を待つ最大時間（ミリ秒）
   };
+
+  // ===== テストモード =====
+  //   ?test         … サーバーに問い合わせず「TEST」のクーポンを出す（本番の枠は使わない）
+  //   ?test=server  … サーバーの「テスト」シートに番号を取りにいく（通信の確認用）
+  // テスト中の保存データは、本番とは別のキー（test_ で始まる名前）に入ります。
+  const QS = new URLSearchParams(location.search);
+  const TEST = QS.has('test');
+  const TEST_SERVER = QS.get('test') === 'server';
+  document.body.classList.toggle('is-test', TEST);
+  if (TEST) {
+    const banner = document.getElementById('test-banner');
+    banner.textContent = TEST_SERVER ? 'テストモード（サーバーの「テスト」シートを使用）' : 'テストモード（本番の枠は使いません）';
+    banner.classList.remove('hidden');
+  }
 
   // ===== クイズデータ（5問、4択） =====
   // answer: 正解の選択肢の番号（0始まり）
@@ -489,10 +551,11 @@
   let locked = false;
 
   // ===== localStorage（使えない環境でも落ちないように） =====
+  const KEY_PREFIX = TEST ? 'test_' : '';
   const store = {
-    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
-    set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
-    del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+    get(k) { try { return localStorage.getItem(KEY_PREFIX + k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(KEY_PREFIX + k, v); } catch (e) {} },
+    del(k) { try { localStorage.removeItem(KEY_PREFIX + k); } catch (e) {} }
   };
 
   // ===== 時計 =====
@@ -512,7 +575,7 @@
   }
 
   // ===== 画面制御 =====
-  const SCREENS = ['screen-start', 'screen-quiz', 'screen-retry', 'screen-success', 'screen-nocoupon', 'screen-redeemed'];
+  const SCREENS = ['screen-start', 'screen-quiz', 'screen-retry', 'screen-claim', 'screen-success', 'screen-soldout', 'screen-nocoupon', 'screen-redeemed'];
   let screenBusy = false;
   // 画面の切り替え：いまの画面がすっとフェードアウト → 次の画面がふわっとフェードイン
   // opts.prepare: 切り替える瞬間に実行する処理（問題文の書き換えなど）／opts.instant: フェードなし
@@ -531,7 +594,7 @@
       void next.offsetWidth;
       next.style.animation = '';
       window.scrollTo(0, 0);
-      if (screenId === 'screen-success' || screenId === 'screen-nocoupon') startCelebration();
+      if (screenId === 'screen-success' || screenId === 'screen-soldout' || screenId === 'screen-nocoupon') startCelebration();
     };
     if (!cur || opts.instant || reduceMotion) { go(); return; }
     if (screenBusy) return;
@@ -711,6 +774,7 @@
       ? 'このクーポンは使用済みです。<br>文化祭を楽しんでくださいね。'
       : 'この画面をお店の人に見せてください。<br>ちぎられたら、ご利用完了です。';
     document.getElementById('tear-hint').classList.toggle('hidden', torn);
+    renderCouponNo();
     document.getElementById('used-time').innerText = torn ? (store.get('quiz_coupon_torn_time') || '') : '';
     document.getElementById('redeemed-time').innerText =
       '引き換え日時: ' + (store.get('quiz_redeemed_time') || '');
@@ -725,12 +789,19 @@
     const failed = store.get('quiz_failed') === 'true';
     document.getElementById('start-note').innerText =
       `全${quizData.length}問・約3分` + (failed ? '　／　※挑戦済みのため、クーポンの対象外です' : '');
-    if (new URLSearchParams(location.search).has('dev')) {
+    if (QS.has('dev') || TEST) {
       document.getElementById('start-dev').classList.remove('hidden');
     }
     if (store.get('quiz_redeemed') === 'true') {
       renderCouponScreen();
       showScreen('screen-redeemed', { instant: true });
+    } else if (store.get('quiz_coupon_no')) {
+      // 番号は取れたが、まだ引き換えていない（再読み込みしても、ここに戻れる）
+      showScreen('screen-success', { instant: true, prepare: renderCouponNo });
+    } else if (store.get('quiz_pending_claim') === 'true') {
+      // 満点は取ったが、番号の取得に失敗したまま閉じた：続きから再試行
+      showScreen('screen-claim', { instant: true });
+      claimCoupon();
     } else {
       showScreen('screen-start', { instant: true });
     }
@@ -875,10 +946,114 @@
     }
   }
 
+  // ===== クーポン番号（先着）の取得 =====
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let claiming = false;
+  let memClientId = null;   // localStorage が使えない環境用
+
+  // この端末を見分けるID（同じIDには、サーバーが同じ番号を返す＝再試行しても重複しない）
+  function clientId() {
+    let id = store.get('quiz_client_id') || memClientId;
+    if (!id) {
+      let rnd;
+      try {
+        rnd = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join('');
+      } catch (e) {
+        rnd = String(Math.random()).slice(2, 14) + Date.now().toString(36);
+      }
+      id = 'c' + rnd;
+      store.set('quiz_client_id', id);
+    }
+    memClientId = id;
+    return id;
+  }
+
+  function needsServer() {
+    return !!CONFIG.claimUrl && !(TEST && !TEST_SERVER);
+  }
+
+  // 戻り値: { status: 'ok', number } / { status: 'soldout', limit } / { status: 'error' }
+  async function requestNumber() {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), CONFIG.claimTimeoutMs);
+    try {
+      const url = CONFIG.claimUrl + (CONFIG.claimUrl.indexOf('?') >= 0 ? '&' : '?') +
+        'action=claim&mode=' + (TEST_SERVER ? 'test' : 'prod') + '&id=' + encodeURIComponent(clientId());
+      const res = await fetch(url, { signal: ctrl.signal, redirect: 'follow' });
+      const data = await res.json();
+      if (!data || !data.ok) return { status: 'error' };
+      if (data.status === 'ok' && data.number != null) return { status: 'ok', number: data.number };
+      if (data.status === 'soldout') return { status: 'soldout', limit: data.limit };
+      return { status: 'error' };
+    } catch (e) {
+      return { status: 'error' };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function setClaimView(view) {
+    document.getElementById('claim-loading').classList.toggle('hidden', view !== 'loading');
+    document.getElementById('claim-error').classList.toggle('hidden', view !== 'error');
+  }
+
+  async function claimCoupon() {
+    if (claiming) return;   // 連打で二重に問い合わせない
+    claiming = true;
+    store.set('quiz_pending_claim', 'true');   // 満点の記録（通信に失敗しても、あとで続きから）
+    setClaimView('loading');
+    // 画面の切り替えが終わるまで待つため、最低0.5秒は確認中の画面を見せる
+    const pair = await Promise.all([requestNumber(), sleep(500)]);
+    const result = pair[0];
+    claiming = false;
+    if (result.status === 'ok') {
+      store.set('quiz_coupon_no', String(result.number));
+      store.del('quiz_pending_claim');
+      showCouponGranted();
+    } else if (result.status === 'soldout') {
+      store.del('quiz_pending_claim');
+      document.getElementById('soldout-limit').textContent = result.limit != null ? result.limit : '';
+      showScreen('screen-soldout');
+    } else {
+      setClaimView('error');
+    }
+  }
+
+  function showCouponGranted() {
+    showScreen('screen-success', { prepare: renderCouponNo });
+  }
+
+  // クーポンに整理番号（テスト中は TEST）を表示する。番号がなければ非表示
+  function renderCouponNo() {
+    const no = store.get('quiz_coupon_no');
+    ['coupon-no-success', 'coupon-no-redeemed'].forEach(id => {
+      const e = document.getElementById(id);
+      e.textContent = '';
+      if (!no) { e.classList.add('hidden'); return; }
+      e.classList.remove('hidden');
+      e.classList.toggle('is-test', no === 'TEST');
+      if (no === 'TEST') {
+        e.textContent = 'TEST（テスト用・無効）';
+      } else {
+        e.appendChild(el('small', null, 'NO.'));
+        e.appendChild(document.createTextNode(no));
+      }
+    });
+  }
+
   function finishQuiz() {
     if (score === quizData.length) {
       // クーポンは「1回目で全問正解」した人だけ。一度でも不正解になった後は満点でもクーポンなし
-      showScreen(store.get('quiz_failed') === 'true' ? 'screen-nocoupon' : 'screen-success');
+      if (store.get('quiz_failed') === 'true') {
+        showScreen('screen-nocoupon');
+      } else if (!needsServer()) {
+        // サーバーを使わない場合（テスト、または claimUrl が空）：そのままクーポンへ
+        if (TEST) store.set('quiz_coupon_no', 'TEST');
+        showCouponGranted();
+      } else {
+        showScreen('screen-claim');
+        claimCoupon();
+      }
     } else {
       store.set('quiz_failed', 'true');
       const rank = RANKS[Math.min(RANKS.length - 1, Math.floor(score * (RANKS.length - 1) / quizData.length))];
@@ -958,6 +1133,9 @@
     store.del('quiz_coupon_torn');
     store.del('quiz_coupon_torn_time');
     store.del('quiz_failed');
+    store.del('quiz_coupon_no');
+    store.del('quiz_pending_claim');
+    store.del('quiz_client_id');
     location.reload();
   }
 </script>
